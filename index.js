@@ -3,6 +3,11 @@ const readline = require('readline')
 
 const d2 = require('d2/lib/d2')
 
+let cli
+let mode
+
+let defCmds = ['help', 'models']
+
 async function main () {
     try {
         const d2c = await d2.init(
@@ -10,17 +15,25 @@ async function main () {
             , headers: { authorization: 'Basic YWRtaW46ZGlzdHJpY3Q=' }
             })
 
-        repl({ d2c })
+        cli = repl(
+            { d2c
+            , completer: tabComplete(defCmds)
+            , prompt: '> '
+            })
+
+        mode = 'default'
+
     } catch (e) {
         console.error(e)
     }
 }
 
-function tabComplete(partial, cb) {
-    const completions = ['help']
-    const hits = completions.filter(c => c.startsWith(partial))
-
-    cb(null, [hits, partial])
+function tabComplete(completions) {
+    return function wrappedCompleter(partial, cb) {
+        const re = new RegExp('^'+partial+'.*$')
+        const hits = completions.filter(c => re.test(c))
+        cb(null, [hits, partial])
+    }
 }
 
 function repl(opts = {}) {
@@ -34,10 +47,10 @@ function repl(opts = {}) {
         { input: stdin
         , output: stdout
         , terminal: true
-        , completer: tabComplete
+        , completer: opts.completer
         })
 
-    rl.setPrompt('>')
+    rl.setPrompt(opts.prompt)
     rl.prompt()
 
     rl.on('line', function (line) {
@@ -46,25 +59,73 @@ function repl(opts = {}) {
     })
 
     rl.on('close', function () {
-        console.log('\nAight, closing up shop. See you next time!')
-        process.exit(0);
+        console.log('bye')
     })
+
+    return rl
+}
+
+function exit () {
+    console.log('\nAight, closing up shop. See you next time!')
+    process.exit(0);
 }
 
 function cmd (d2, line) {
     //d2.models.programIndicator.modelProperties)
-    let args = line.split(' ')
+    switch(line) {
+        case 'models':
+            mode = 'models'
 
-    let cmdstr = args[0]
-    let cmdparam = args[1]
+            const models = Object.keys(d2.models)
 
-    switch(cmdstr) {
-        case 'model':
-            console.log(Object.keys(d2.models[cmdparam].modelProperties))
-            break;
+            cli.completer = tabComplete(models)
+            cli.setPrompt('models> ')
+
+            break
+
+        case 'esc':
+            mode = 'default'
+            cli.completer = tabComplete(defCmds)
+            cli.setPrompt('> ')
+
+            break
+
+        case 'exit':
+            exit()
+            
         default:
-            console.log(`Unknown command: '${line}'`)
+            const modelProps = get(d2.models, line)
+            try {
+                pp(modelProps)
+            } catch (e) {
+                console.log(`Unknown command: '${line}'`, e)
+            }
     }
+}
+
+function get(models, props) {
+    if (props.indexOf('.') === -1 && models.hasOwnProperty(props)) {
+        return models[props]
+    }
+
+    let proplist = props.split('.')
+    let prop = proplist.shift()
+
+    if (models.hasOwnProperty(prop)) {
+        return get(models[prop], proplist.join('.'))
+    }
+}
+
+function pp (thing) {
+    if (thing instanceof Object) {
+        let list = Object.keys(thing)
+        for (let i of list) {
+            console.log('\t', i)
+        }
+    } else {
+        console.log(thing)
+    }
+    console.log('') // just gimme some space
 }
 
 main()
