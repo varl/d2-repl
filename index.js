@@ -1,34 +1,73 @@
 require('isomorphic-fetch')
+
+const Rx = require('rx')
+const RxNode = require('rx-node')
+
 const readline = require('readline')
 
 const d2 = require('d2/lib/d2')
 
-let cli
-let mode
+// set up the readline interface
+const defCmds =
+    ['help'
+    , 'models'
+    , 'exit'
+    ]
 
-let defCmds = ['help', 'models']
-
-async function main () {
-    try {
-        const d2c = await d2.init(
-            { baseUrl: 'http://dev-dhis2:8080/dhis/api'
-            , headers: { authorization: 'Basic YWRtaW46ZGlzdHJpY3Q=' }
-            })
-
-        cli = repl(
-            { d2c
-            , completer: tabComplete(defCmds)
-            , prompt: '> '
-            })
-
-        mode = 'default'
-
-    } catch (e) {
-        console.error(e)
+const rl = repl(
+    { completer: tabComplete(defCmds)
+    , prompt: '> '
     }
+)
+
+const initialState =
+    { rl
+    , mode: 'default'
+    , cmd: 'help'
+    , baseUrl: 'http://dev-dhis2:8080/dhis/api'
+    , headers: { authorization: 'Basic YWRtaW46ZGlzdHJpY3Q=' }
+    }
+
+const rl$ = RxNode.fromReadLineStream(rl)
+
+const d2$ = Rx.Observable.fromPromise(d2.init(
+    { baseUrl: initialState.baseUrl
+    , headers: initialState.headers
+    }
+))
+
+const state$ = Rx.Observable
+    .merge(
+        rl$.map(cmd => state => {
+            return Object.assign(state, { cmd })
+        }),
+        d2$.map(d2 => state => {
+            return Object.assign(state, { d2 })
+        }),
+    )
+    .scan((state, makeNew) => makeNew(state), initialState)
+    .startWith(initialState)
+
+state$.subscribe(
+    state => { 
+        if (!state.d2) {
+            console.info('Waiting for D2 to init...')
+        } else {
+            rxmain(state)
+        }
+    }
+    , err => console.error(err)
+    , exit
+)
+
+function rxmain (state) {
+    const { cmd, d2, rl } = state
+    parsecmd(d2, cmd, rl)
+    rl.prompt()
 }
 
 function tabComplete(completions) {
+    completions.sort()
     return function wrappedCompleter(partial, cb) {
         const re = new RegExp('^'+partial+'.*$')
         const hits = completions.filter(c => re.test(c))
@@ -37,7 +76,6 @@ function tabComplete(completions) {
 }
 
 function repl(opts = {}) {
-    const d2 = opts.d2c
     const stdin = process.stdin
     const stdout = process.stdout
 
@@ -47,20 +85,11 @@ function repl(opts = {}) {
         { input: stdin
         , output: stdout
         , terminal: true
-        , completer: opts.completer
-        })
+        }
+    )
 
     rl.setPrompt(opts.prompt)
     rl.prompt()
-
-    rl.on('line', function (line) {
-        cmd(d2, line)
-        rl.prompt()
-    })
-
-    rl.on('close', function () {
-        console.log('bye')
-    })
 
     return rl
 }
@@ -70,37 +99,22 @@ function exit () {
     process.exit(0);
 }
 
-function cmd (d2, line) {
+function parsecmd (d2, line, rl) {
     //d2.models.programIndicator.modelProperties)
-    switch(line) {
-        case 'models':
-            mode = 'models'
 
-            const models = Object.keys(d2.models)
-
-            cli.completer = tabComplete(models)
-            cli.setPrompt('models> ')
-
-            break
-
-        case 'esc':
-            mode = 'default'
-            cli.completer = tabComplete(defCmds)
-            cli.setPrompt('> ')
-
-            break
-
-        case 'exit':
-            exit()
-            
-        default:
-            const modelProps = get(d2.models, line)
-            try {
-                pp(modelProps)
-            } catch (e) {
-                console.log(`Unknown command: '${line}'`, e)
-            }
+    if (line.startsWith('help')) {
+        console.info(`Available commands are: ${defCmds}`)
     }
+
+    if (line.startsWith('exit')) {
+        exit()
+    }
+            
+    const models = Object.keys(d2)
+    rl.completer = tabComplete(defCmds.concat(models))
+
+    const modelProps = get(d2, line)
+    pp(modelProps)
 }
 
 function get(models, props) {
@@ -127,5 +141,3 @@ function pp (thing) {
     }
     console.log('') // just gimme some space
 }
-
-main()
