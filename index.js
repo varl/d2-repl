@@ -2,10 +2,14 @@ require('isomorphic-fetch')
 
 const Rx = require('rx')
 const RxNode = require('rx-node')
+const path = require('path')
 
 const readline = require('readline')
 
 const d2 = require('d2/lib/d2')
+
+const dhis2_home = process.env.DHIS2_HOME
+const config = require(path.join(dhis2_home, 'config.json'))
 
 // set up the readline interface
 const defCmds =
@@ -24,8 +28,11 @@ const initialState =
     { rl
     , mode: 'default'
     , cmd: 'help'
-    , baseUrl: 'http://dev-dhis2:8080/dhis/api'
-    , headers: { authorization: 'Basic YWRtaW46ZGlzdHJpY3Q=' }
+    , baseUrl: config.baseUrl + '/api'
+    , headers:
+        { 'authorization': config.authorization
+        , 'x-requested-with': 'XMLHttpRequest'
+        }
     }
 
 const rl$ = RxNode.fromReadLineStream(rl)
