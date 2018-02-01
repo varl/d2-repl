@@ -1,12 +1,15 @@
 {
   "name": "fai",
   "version": "1.0.0",
-  "main": "index.js",
+  "main": "repl.js",
   "license": "MIT",
   "dependencies": {
     "d2": "^28.3.0",
     "isomorphic-fetch": "^2.2.1",
     "rx-node": "^1.0.2",
     "rxjs": "^5.5.6"
+  },
+  "scripts": {
+    "start": "node repl.js"
   }
 }

@@ -5,16 +5,25 @@ const RxNode = require('rx-node')
 const path = require('path')
 
 const readline = require('readline')
+const util = require('util')
 
 const d2 = require('d2/lib/d2')
 
 const dhis2_home = process.env.DHIS2_HOME
 const config = require(path.join(dhis2_home, 'config.json'))
 
+const welcome = `
+██████╗ ██╗  ██╗██╗███████╗██████╗ 
+██╔══██╗██║  ██║██║██╔════╝╚════██╗
+██║  ██║███████║██║███████╗ █████╔╝
+██║  ██║██╔══██║██║╚════██║██╔═══╝ 
+██████╔╝██║  ██║██║███████║███████╗
+╚═════╝ ╚═╝  ╚═╝╚═╝╚══════╝╚══════╝
+`
+
 // set up the readline interface
 const defCmds =
     ['help'
-    , 'models'
     , 'exit'
     ]
 
@@ -43,29 +52,34 @@ const d2$ = Rx.Observable.fromPromise(d2.init(
     }
 ))
 
-const state$ = Rx.Observable
-    .merge(
-        rl$.map(cmd => state => {
-            return Object.assign(state, { cmd })
-        }),
-        d2$.map(d2 => state => {
-            return Object.assign(state, { d2 })
-        }),
-    )
-    .scan((state, makeNew) => makeNew(state), initialState)
-    .startWith(initialState)
 
-state$.subscribe(
-    state => { 
-        if (!state.d2) {
-            console.info('Waiting for D2 to init...')
-        } else {
-            rxmain(state)
+function main () {
+    console.info(welcome)
+
+    const state$ = Rx.Observable
+        .merge(
+            rl$.map(cmd => state => {
+                return Object.assign(state, { cmd })
+            }),
+            d2$.map(d2 => state => {
+                return Object.assign(state, { d2 })
+            }),
+        )
+        .scan((state, makeNew) => makeNew(state), initialState)
+        .startWith(initialState)
+
+    state$.subscribe(
+        state => { 
+            if (!state.d2) {
+                console.info('Waiting for D2 to init...')
+            } else {
+                rxmain(state)
+            }
         }
-    }
-    , err => console.error(err)
-    , exit
-)
+        , err => console.error(err)
+        , exit
+    )
+}
 
 function rxmain (state) {
     const { cmd, d2, rl } = state
@@ -138,13 +152,7 @@ function get(models, props) {
 }
 
 function pp (thing) {
-    if (thing instanceof Object) {
-        let list = Object.keys(thing)
-        for (let i of list) {
-            console.log('\t', i)
-        }
-    } else {
-        console.log(thing)
-    }
-    console.log('') // just gimme some space
+    console.log(util.inspect(thing, { showHidden: false, depth: 0, colors: true }))
 }
+
+main()
